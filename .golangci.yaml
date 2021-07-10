@@ -1,0 +1,29 @@
+run:
+  timeout: 5m
+  skip-dirs: # remove ??
+    - /gen/
+    - /bin/
+linters:
+  enable-all: true
+  disable:
+    - exhaustivestruct
+  fast: false
+linters-settings:
+  gocritic:
+    enabled-tags:
+      - style
+      - experimental
+      - performance
+      - diagnostic
+      - opinionated
+
+  govet:
+    enable-all: true
+    disable:
+      - shadow
+
+  gci:
+    local-prefixes: github.com/loghole/nats
+
+  funlen:
+    lines: 80

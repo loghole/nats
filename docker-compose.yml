@@ -1,0 +1,93 @@
+version: '2.4'
+services:
+  test:
+    image: golang:1.16-alpine
+    volumes:
+      - './:/src'
+      - go-mod-cache:/go/pkg
+      - go-build-cache:/root/.cache/go-build
+    working_dir: /src
+    networks:
+      - nats
+    links:
+      - n1
+      - n2
+      - n3
+      - jaeger
+    ports:
+      - 8080:8080
+    environment:
+      CGO_ENABLED: 0
+
+  n1:
+    container_name: n1
+    image: nats:2.3.2-scratch
+    entrypoint: /nats-server
+    command: "--config /config/jetstream.conf --server_name S1"
+    networks:
+      - nats
+    ports:
+      - 127.0.0.1:4222:4222
+    volumes:
+      - ./test/config:/config
+      - ./data/server-n1/:/data/nats-server/jetstream
+
+  n2:
+    container_name: n2
+    image: nats:2.3.2-scratch
+    entrypoint: /nats-server
+    command: "--config /config/jetstream.conf --server_name S2"
+    networks:
+      - nats
+    ports:
+      - 127.0.0.1:4223:4222
+    volumes:
+      - ./test/config:/config
+      - ./data/server-n2/:/data/nats-server/jetstream
+
+  n3:
+    container_name: n3
+    image: nats:2.3.2-scratch
+    entrypoint: /nats-server
+    command: "--config /config/jetstream.conf --server_name S3"
+    networks:
+      - nats
+    ports:
+      - 127.0.0.1:4224:4222
+    volumes:
+      - ./test/config:/config
+      - ./data/server-n3/:/data/nats-server/jetstream
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.20
+    ports:
+      - "127.0.0.1:6831:6831/udp"
+      - "127.0.0.1:16686:16686"
+
+  linter:
+    image: golangci/golangci-lint:v1.41
+    working_dir: /src
+    volumes:
+      - ./:/src
+      - go-mod-cache:/go/pkg
+      - go-build-cache:/root/.cache/go-build
+      - go-lint-cache:/root/.cache/golangci-lint
+  
+  goimports:
+    build: 
+      context: ./
+      dockerfile: goimports.Dockerfile
+    working_dir: /src
+    volumes:
+      - ./:/src
+
+volumes:
+  go-mod-cache:
+    external: true
+  go-build-cache:
+    external: true
+  go-lint-cache:
+    external: true
+
+networks:
+  nats: {}
