@@ -13,3 +13,7 @@ type Message = nats.Msg
 type Handler func(ctx context.Context, msg *Message) error
 
 type PubAck = nats.PubAck
+
+type StreamConfig = nats.StreamConfig
+
+type NatsOption = nats.Option

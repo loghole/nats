@@ -8,14 +8,14 @@ import (
 type options struct {
 	tracer opentracing.Tracer
 
-	streamConfig *nats.StreamConfig
+	streamConfig *StreamConfig
 
 	natsOption []nats.Option
 }
 
 func newOptions() *options {
 	return &options{
-		streamConfig: &nats.StreamConfig{},
+		streamConfig: &StreamConfig{},
 	}
 }
 
@@ -27,13 +27,13 @@ func WithTracer(tracer opentracing.Tracer) Option {
 	}
 }
 
-func WithNatsOptions(opts ...nats.Option) Option {
+func WithNatsOptions(opts ...NatsOption) Option {
 	return func(o *options) {
 		o.natsOption = append(o.natsOption, opts...)
 	}
 }
 
-func WithStreamConfig(cfg *nats.StreamConfig) Option {
+func WithStreamConfig(cfg *StreamConfig) Option {
 	return func(o *options) {
 		o.streamConfig = cfg
 	}
