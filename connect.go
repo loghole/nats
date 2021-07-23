@@ -28,6 +28,12 @@ func (c *JetStreamClient) Connect() (err error) {
 		if _, err = c.jetStream.AddStream(c.options.streamConfig); err != nil {
 			return fmt.Errorf("add stream: %w", err)
 		}
+
+		return nil
+	}
+
+	if _, err = c.jetStream.UpdateStream(c.options.streamConfig); err != nil {
+		return fmt.Errorf("add stream: %w", err)
 	}
 
 	return nil
