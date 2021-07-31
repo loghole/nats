@@ -16,4 +16,4 @@ type PubAck = nats.PubAck
 
 type StreamConfig = nats.StreamConfig
 
-type NatsOption = nats.Option
+type NatsOption = nats.Option // nolint:golint,revive // need nats option.
