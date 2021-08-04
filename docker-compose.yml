@@ -14,8 +14,6 @@ services:
       - n2
       - n3
       - jaeger
-    ports:
-      - 8080:8080
     environment:
       CGO_ENABLED: 0
 
@@ -26,8 +24,6 @@ services:
     command: "--config /config/jetstream.conf --server_name S1"
     networks:
       - nats
-    ports:
-      - 127.0.0.1:4222:4222
     volumes:
       - ./test/config:/config
       - ./data/server-n1/:/data/nats-server/jetstream
@@ -39,8 +35,6 @@ services:
     command: "--config /config/jetstream.conf --server_name S2"
     networks:
       - nats
-    ports:
-      - 127.0.0.1:4223:4222
     volumes:
       - ./test/config:/config
       - ./data/server-n2/:/data/nats-server/jetstream
@@ -52,17 +46,12 @@ services:
     command: "--config /config/jetstream.conf --server_name S3"
     networks:
       - nats
-    ports:
-      - 127.0.0.1:4224:4222
     volumes:
       - ./test/config:/config
       - ./data/server-n3/:/data/nats-server/jetstream
 
   jaeger:
     image: jaegertracing/all-in-one:1.20
-    ports:
-      - "127.0.0.1:6831:6831/udp"
-      - "127.0.0.1:16686:16686"
 
   linter:
     image: golangci/golangci-lint:v1.41

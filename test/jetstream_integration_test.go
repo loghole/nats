@@ -14,7 +14,7 @@ import (
 	"github.com/loghole/nats"
 )
 
-func TestIntegration(t *testing.T) {
+func TestJetstreamClient(t *testing.T) {
 	time.Sleep(time.Second * 2) // timeout to nats cluster started
 
 	t.Parallel()
@@ -32,7 +32,7 @@ func TestIntegration(t *testing.T) {
 
 	defer closer.Close()
 
-	client, err := nats.New(&nats.Config{
+	client, err := nats.NewJetstream(&nats.Config{
 		Addr:       "nats://n1:4222, nats://n2:4223, nats://n3:4224",
 		StreamName: "TEST",
 		Subjects:   []string{"TEST.test"},
@@ -45,10 +45,10 @@ func TestIntegration(t *testing.T) {
 
 	defer client.Close()
 
-	t.Run("PublishSubscribeTest", PublishSubscribeTest(client))
+	t.Run("PublishSubscribeTest", PublishSubscribeJetstreamClientTest(client))
 }
 
-func PublishSubscribeTest(client *nats.JetStreamClient) func(t *testing.T) {
+func PublishSubscribeJetstreamClientTest(client *nats.JetstreamClient) func(t *testing.T) {
 	return func(t *testing.T) {
 		var (
 			received = make([]string, 0, 0)
@@ -81,10 +81,6 @@ func PublishSubscribeTest(client *nats.JetStreamClient) func(t *testing.T) {
 		assert.Equal(t, expected, received)
 
 		if err := client.Drain(); err != nil {
-			t.Error(err)
-		}
-
-		if err := client.Close(); err != nil {
 			t.Error(err)
 		}
 	}
