@@ -58,7 +58,7 @@ func (c *NatsClient) Publish(ctx context.Context, subject string, data []byte) e
 		parentCtx = parent.Context()
 	}
 
-	span := c.tracer().StartSpan(defaultNameFunc(subject), opentracing.ChildOf(parentCtx))
+	span := c.tracer().StartSpan(defaultNameFunc(natsComponent, subject), opentracing.ChildOf(parentCtx))
 	defer span.Finish()
 
 	ext.SpanKindProducer.Set(span)

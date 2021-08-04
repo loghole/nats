@@ -86,7 +86,7 @@ func (c *JetstreamClient) Publish(ctx context.Context, subject string, data []by
 		parentCtx = parent.Context()
 	}
 
-	span := c.tracer().StartSpan(defaultNameFunc(subject), opentracing.ChildOf(parentCtx))
+	span := c.tracer().StartSpan(defaultNameFunc(jetstreamComponent, subject), opentracing.ChildOf(parentCtx))
 	defer span.Finish()
 
 	ext.SpanKindProducer.Set(span)
@@ -158,8 +158,4 @@ func (c *JetstreamClient) tracer() opentracing.Tracer {
 	}
 
 	return &opentracing.NoopTracer{}
-}
-
-func defaultNameFunc(method string) string {
-	return jetstreamComponent + " " + method
 }
