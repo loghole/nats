@@ -16,7 +16,7 @@ func buildHandler(tracer opentracing.Tracer, component, subject string, handler 
 
 		spanContext, _ := tracer.Extract(opentracing.Binary, buf)
 
-		span := tracer.StartSpan(defaultNameFunc(subject), opentracing.FollowsFrom(spanContext))
+		span := tracer.StartSpan(defaultNameFunc(component, subject), opentracing.FollowsFrom(spanContext))
 		defer span.Finish()
 
 		ext.SpanKindConsumer.Set(span)
@@ -35,4 +35,8 @@ func buildHandler(tracer opentracing.Tracer, component, subject string, handler 
 			return
 		}
 	}
+}
+
+func defaultNameFunc(component, method string) string {
+	return component + " " + method
 }
