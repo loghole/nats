@@ -95,6 +95,40 @@ func (c *NatsClient) Subscribe(subject string, handler Handler) (*nats.Subscript
 	return sub, nil
 }
 
+func (c *NatsClient) RequestWithContext(ctx context.Context, subject string, data []byte) (*Message, error) {
+	var parentCtx opentracing.SpanContext
+
+	if parent := opentracing.SpanFromContext(ctx); parent != nil {
+		parentCtx = parent.Context()
+	}
+
+	span := c.tracer().StartSpan(defaultNameFunc(natsComponent, subject), opentracing.ChildOf(parentCtx))
+	defer span.Finish()
+
+	ext.SpanKindProducer.Set(span)
+	ext.MessageBusDestination.Set(span, subject)
+	ext.Component.Set(span, natsComponent)
+
+	buf := bytes.NewBuffer(nil)
+
+	// We have no better place to record an error than the Span itself.
+	if err := c.tracer().Inject(span.Context(), opentracing.Binary, buf); err != nil {
+		span.LogFields(log.String("event", "Tracer.Inject() failed"), log.Error(err))
+	}
+
+	// Write payload.
+	if _, err := buf.Write(data); err != nil {
+		return nil, fmt.Errorf("write payload: %w", err)
+	}
+
+	msg, err := c.natsConn.RequestWithContext(ctx, subject, buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("nats request with context: %w", err)
+	}
+
+	return msg, nil
+}
+
 func (c *NatsClient) Unsubscribe() error {
 	errList := make([]error, 0)
 
