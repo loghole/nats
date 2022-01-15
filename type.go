@@ -6,7 +6,7 @@ import (
 	nats "github.com/nats-io/nats.go"
 )
 
-// Nats message is nats.Msg.
+// Message is nats.Msg.
 type Message = nats.Msg
 
 // Handler to handle sub message.

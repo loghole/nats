@@ -7,7 +7,7 @@ export CGO_ENABLED := 0
 test:
 	${DOCKER_COMPOSE_RUN} run --rm test /bin/sh -c "go test -tags=integration ./..."
 	${DOCKER_COMPOSE_RUN} run --rm test /bin/sh -c "rm -r ./data"
-	${DOCKER_COMPOSE_RUN} down
+	#${DOCKER_COMPOSE_RUN} down
 
 .PHONY: lint
 lint:
