@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package nats_test
@@ -7,32 +8,43 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loghole/nats"
 	"github.com/stretchr/testify/assert"
-	"github.com/uber/jaeger-client-go/config"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/sdk/resource"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+
+	"github.com/loghole/nats"
 )
 
 func TestNatsClient(t *testing.T) {
-	time.Sleep(time.Second * 2) // timeout to nats cluster started
+	time.Sleep(time.Second * 5) // timeout to nats cluster started
 
 	t.Parallel()
 
-	configuration := &config.Configuration{
-		ServiceName: "nats-test",
-		Sampler:     &config.SamplerConfig{Type: "const", Param: 1},
-		Reporter:    &config.ReporterConfig{BufferFlushInterval: time.Second},
-	}
-
-	tracer, closer, err := configuration.NewTracer()
+	// Create the Jaeger exporter
+	exp, err := jaeger.New(jaeger.WithAgentEndpoint(jaeger.WithAgentHost("jaeger")))
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
 
-	defer closer.Close()
+	tp := tracesdk.NewTracerProvider(
+		tracesdk.WithSpanProcessor(tracesdk.NewBatchSpanProcessor(exp)),
+		tracesdk.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("nats-test"),
+		)),
+		tracesdk.WithSampler(tracesdk.AlwaysSample()),
+	)
+
+	otel.SetTracerProvider(tp)
+
+	defer tp.Shutdown(context.Background())
 
 	client, err := nats.New(&nats.Config{
 		Addr: "nats://n1:4222, nats://n2:4223, nats://n3:4224",
-	}, nats.WithTracer(tracer))
+	}, nats.WithTracer(tp.Tracer("default")))
 	if err != nil {
 		t.Error(err)
 

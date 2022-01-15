@@ -4,11 +4,11 @@ import (
 	"context"
 
 	nats "github.com/nats-io/nats.go"
-	"github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type options struct {
-	tracer opentracing.Tracer
+	tracer trace.Tracer
 
 	streamConfig *StreamConfig
 
@@ -23,7 +23,7 @@ func newOptions() *options {
 
 type Option func(*options)
 
-func WithTracer(tracer opentracing.Tracer) Option {
+func WithTracer(tracer trace.Tracer) Option {
 	return func(o *options) {
 		o.tracer = tracer
 	}

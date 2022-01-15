@@ -1,36 +1,31 @@
 package nats
 
 import (
-	"bytes"
 	"context"
 
 	nats "github.com/nats-io/nats.go"
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
-func buildHandler(tracer opentracing.Tracer, component, subject string, handler Handler) nats.MsgHandler {
+func buildHandler(tracer trace.Tracer, component, subject string, handler Handler) nats.MsgHandler {
 	return func(msg *nats.Msg) {
-		// Read trace carrier.
-		buf := bytes.NewBuffer(msg.Data)
+		ctx := new(propagation.TraceContext).Extract(context.Background(), propagation.HeaderCarrier(msg.Header))
 
-		spanContext, _ := tracer.Extract(opentracing.Binary, buf)
+		ctx, span := tracer.Start(ctx, defaultNameFunc(component, subject))
+		defer span.End()
 
-		span := tracer.StartSpan(defaultNameFunc(component, subject), opentracing.FollowsFrom(spanContext))
-		defer span.Finish()
-
-		ext.SpanKindConsumer.Set(span)
-		ext.MessageBusDestination.Set(span, msg.Subject)
-		ext.Component.Set(span, component)
-
-		ctx := opentracing.ContextWithSpan(context.Background(), span)
-
-		// Drop span data from msg data.
-		msg.Data = buf.Bytes()
+		span.SetAttributes(
+			semconv.MessagingSystemKey.String(_natsComponent),
+			semconv.MessagingDestinationKey.String(subject),
+			semconv.MessagingMessagePayloadSizeBytesKey.Int(len(msg.Data)),
+		)
 
 		if err := handler(ctx, msg); err != nil {
-			ext.Error.Set(span, true)
-			ext.LogError(span, err)
+			span.SetAttributes(attribute.Bool("error", true))
+			span.RecordError(err)
 
 			return
 		}

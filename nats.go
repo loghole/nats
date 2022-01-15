@@ -1,17 +1,17 @@
 package nats
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
 	nats "github.com/nats-io/nats.go"
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
-	"github.com/opentracing/opentracing-go/log"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
-const natsComponent = "NATS"
+const _natsComponent = "NATS"
 
 type NatsClient struct { // nolint:golint,revive // need nats client.
 	config  *Config
@@ -52,32 +52,27 @@ func (c *NatsClient) Connect() (err error) {
 }
 
 func (c *NatsClient) Publish(ctx context.Context, subject string, data []byte) error {
-	var parentCtx opentracing.SpanContext
-
-	if parent := opentracing.SpanFromContext(ctx); parent != nil {
-		parentCtx = parent.Context()
+	msg := &Message{
+		Subject: subject,
+		Header:  make(map[string][]string),
+		Data:    data,
 	}
 
-	span := c.tracer().StartSpan(defaultNameFunc(natsComponent, subject), opentracing.ChildOf(parentCtx))
-	defer span.Finish()
+	ctx, span := c.tracer().Start(ctx, defaultNameFunc(_natsComponent, subject))
+	defer span.End()
 
-	ext.SpanKindProducer.Set(span)
-	ext.MessageBusDestination.Set(span, subject)
-	ext.Component.Set(span, natsComponent)
+	new(propagation.TraceContext).Inject(ctx, propagation.HeaderCarrier(msg.Header))
 
-	buf := bytes.NewBuffer(nil)
+	span.SetAttributes(
+		semconv.MessagingSystemKey.String(_natsComponent),
+		semconv.MessagingDestinationKey.String(subject),
+		semconv.MessagingMessagePayloadSizeBytesKey.Int(len(data)),
+	)
 
-	// We have no better place to record an error than the Span itself.
-	if err := c.tracer().Inject(span.Context(), opentracing.Binary, buf); err != nil {
-		span.LogFields(log.String("event", "Tracer.Inject() failed"), log.Error(err))
-	}
+	if err := c.natsConn.PublishMsg(msg); err != nil {
+		span.SetAttributes(attribute.Bool("error", true))
+		span.RecordError(err)
 
-	// Write payload.
-	if _, err := buf.Write(data); err != nil {
-		return fmt.Errorf("write payload: %w", err)
-	}
-
-	if err := c.natsConn.Publish(subject, buf.Bytes()); err != nil {
 		return fmt.Errorf("nats publish: %w", err)
 	}
 
@@ -85,7 +80,7 @@ func (c *NatsClient) Publish(ctx context.Context, subject string, data []byte) e
 }
 
 func (c *NatsClient) Subscribe(subject string, handler Handler) (*nats.Subscription, error) {
-	sub, err := c.natsConn.Subscribe(subject, buildHandler(c.tracer(), natsComponent, subject, handler))
+	sub, err := c.natsConn.Subscribe(subject, buildHandler(c.tracer(), _natsComponent, subject, handler))
 	if err != nil {
 		return nil, fmt.Errorf("nats subscribe: %w", err)
 	}
@@ -123,10 +118,10 @@ func (c *NatsClient) Close() {
 	c.natsConn.Close()
 }
 
-func (c *NatsClient) tracer() opentracing.Tracer {
+func (c *NatsClient) tracer() trace.Tracer {
 	if c.options.tracer != nil {
 		return c.options.tracer
 	}
 
-	return &opentracing.NoopTracer{}
+	return trace.NewNoopTracerProvider().Tracer("")
 }

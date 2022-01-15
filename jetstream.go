@@ -1,18 +1,18 @@
 package nats
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 
 	nats "github.com/nats-io/nats.go"
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
-	"github.com/opentracing/opentracing-go/log"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
-const jetstreamComponent = "Jetstream"
+const _jetstreamComponent = "Jetstream"
 
 type JetstreamClient struct {
 	config    *Config
@@ -59,8 +59,7 @@ func (c *JetstreamClient) Connect() (err error) {
 	}
 
 	stream, err := c.jetStream.StreamInfo(c.options.streamConfig.Name)
-	// nolint:godox // wait next version
-	if err != nil && !strings.Contains(err.Error(), "stream not found") { // TODO !errors.Is(err, nats.ErrStreamNotFound) {
+	if err != nil && !errors.Is(err, nats.ErrStreamNotFound) {
 		return fmt.Errorf("get stream info: %w", err)
 	}
 
@@ -80,41 +79,36 @@ func (c *JetstreamClient) Connect() (err error) {
 }
 
 func (c *JetstreamClient) Publish(ctx context.Context, subject string, data []byte) (*PubAck, error) {
-	var parentCtx opentracing.SpanContext
-
-	if parent := opentracing.SpanFromContext(ctx); parent != nil {
-		parentCtx = parent.Context()
+	msg := &Message{
+		Subject: subject,
+		Header:  make(map[string][]string),
+		Data:    data,
 	}
 
-	span := c.tracer().StartSpan(defaultNameFunc(jetstreamComponent, subject), opentracing.ChildOf(parentCtx))
-	defer span.Finish()
+	ctx, span := c.tracer().Start(ctx, defaultNameFunc(_jetstreamComponent, subject))
+	defer span.End()
 
-	ext.SpanKindProducer.Set(span)
-	ext.MessageBusDestination.Set(span, subject)
-	ext.Component.Set(span, jetstreamComponent)
+	new(propagation.TraceContext).Inject(ctx, propagation.HeaderCarrier(msg.Header))
 
-	buf := bytes.NewBuffer(nil)
+	span.SetAttributes(
+		semconv.MessagingSystemKey.String(_natsComponent),
+		semconv.MessagingDestinationKey.String(subject),
+		semconv.MessagingMessagePayloadSizeBytesKey.Int(len(data)),
+	)
 
-	// We have no better place to record an error than the Span itself.
-	if err := c.tracer().Inject(span.Context(), opentracing.Binary, buf); err != nil {
-		span.LogFields(log.String("event", "Tracer.Inject() failed"), log.Error(err))
-	}
-
-	// Write payload.
-	if _, err := buf.Write(data); err != nil {
-		return nil, fmt.Errorf("write payload: %w", err)
-	}
-
-	ack, err := c.jetStream.Publish(subject, buf.Bytes())
+	ack, err := c.jetStream.PublishMsg(msg)
 	if err != nil {
-		return nil, fmt.Errorf("jetstream publish: %w", err)
+		span.SetAttributes(attribute.Bool("error", true))
+		span.RecordError(err)
+
+		return nil, fmt.Errorf("nats publish: %w", err)
 	}
 
 	return ack, nil
 }
 
 func (c *JetstreamClient) Subscribe(subject string, handler Handler, opts ...nats.SubOpt) (*nats.Subscription, error) {
-	sub, err := c.jetStream.Subscribe(subject, buildHandler(c.tracer(), jetstreamComponent, subject, handler), opts...)
+	sub, err := c.jetStream.Subscribe(subject, buildHandler(c.tracer(), _jetstreamComponent, subject, handler), opts...)
 	if err != nil {
 		return nil, fmt.Errorf("jetstream subscribe: %w", err)
 	}
@@ -152,10 +146,10 @@ func (c *JetstreamClient) Close() {
 	c.natsConn.Close()
 }
 
-func (c *JetstreamClient) tracer() opentracing.Tracer {
+func (c *JetstreamClient) tracer() trace.Tracer {
 	if c.options.tracer != nil {
 		return c.options.tracer
 	}
 
-	return &opentracing.NoopTracer{}
+	return trace.NewNoopTracerProvider().Tracer("")
 }
